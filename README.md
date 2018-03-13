@@ -25,14 +25,17 @@ No external packages are needed
 
 QUICK START
 -------
+At first we should go to src/
 
-Script can be run with the one of the next lines:
+$cd src
 
-python log_analyzer.py
+Then she script can be run with the one of the next lines:
 
-python log_analyzer.py -c 'extconfig.json'
+$python log_analyzer.py
 
-python log_analyzer.py --config 'extconfig.json'
+$python log_analyzer.py -c 'extconfig.json'
+
+$python log_analyzer.py --config 'extconfig.json'
 
 DESCRIPTION
 ----
