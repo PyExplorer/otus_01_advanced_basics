@@ -42,14 +42,20 @@ def get_config_from_parser():
 
 
 def set_logging(log_filename):
+    str_format = '[%(asctime)s] %(levelname).1s %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
     logging.basicConfig(
         filename=log_filename,
         level=logging.DEBUG,
-        format='[%(asctime)s] '
-               '%(levelname).1s '
-               '%(message)s ',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format=str_format,
+        datefmt=date_format
     )
+    # add log to stdout
+    console = logging.StreamHandler()
+    console.setLevel(logging.DEBUG)
+    formatter = logging.Formatter(str_format, datefmt=date_format)
+    console.setFormatter(formatter)
+    logging.getLogger('').addHandler(console)
 
 
 def merge_two_config(a, b):
@@ -150,7 +156,7 @@ def get_by_line(log_path):
     else:
         log = open(log_path)
     for line in log:
-        yield line
+        yield line.encode('utf-8')
     log.close()
 
 
@@ -160,9 +166,9 @@ def get_url_from_line(line, line_number):
     :param line_number: current line number
     :return: str with url
     """
-    url = re.findall('\d+\.\d+\.\d+\.\d+\s.*\s.*\[.*?]\s".*?\s\/(.*?)\s.*"\s\d+\s\d+', line)
+    url = re.findall('\d+\.\d+\.\d+\.\d+\s.*\s.*\[.*?]\s".*?\s(.*?)\s.*"\s\d+\s\d+', line)
     if not url:
-        logging.error('Can\'t parse url from line {} of report'.format(line_number))
+        logging.error('Can\'t parse url from line {} of report, line is {}'.format(line_number, line.strip()))
         return
     return url[0]
 
