@@ -14,6 +14,7 @@ import re
 import sys
 import time
 from argparse import ArgumentParser
+from datetime import datetime
 from os import listdir
 from os import path
 from os import utime
@@ -28,16 +29,20 @@ SAMPLE = 'nginx-access-ui.log-'
 RE_TIME = '[-](\d{8})[.]'
 BASE_REPORT_NAME = 'report.html'
 BASE_REPORT_REPL = '$table_json'
-PREC = 7  # precision for round stat values
-PROC_ERRORS_LIMIT = 50  # percentage to stop parsing
-START_CHECK_ERRORS = 3  # number of attempts for start checking on errors
+PREC = 5  # precision for round stat values
+PROC_ERRORS_LIMIT = 0.01
 
 
-def get_config_from_parser():
+def get_config():
     parser = ArgumentParser(description="Parser")
     parser.add_argument("-c", "--config", action='store', default="config.json",
                         help="Set the path for config.json")
     args = parser.parse_args()
+
+    if not path.isfile(args.config):
+        print "File " + args.config + " doesn't exist"
+        return
+
     return args.config
 
 
@@ -50,12 +55,6 @@ def set_logging(log_filename):
         format=str_format,
         datefmt=date_format
     )
-    # add log to stdout
-    console = logging.StreamHandler()
-    console.setLevel(logging.DEBUG)
-    formatter = logging.Formatter(str_format, datefmt=date_format)
-    console.setFormatter(formatter)
-    logging.getLogger('').addHandler(console)
 
 
 def merge_two_config(a, b):
@@ -69,43 +68,36 @@ def merge_two_config(a, b):
     return c
 
 
-def get_last_log_name(log_path):
+def get_path_last_log(logs_path):
     """
-    :param log_path: path for log's directory
-    :return: str with name for the last log
+    :param logs_path: path for log's directory
+    :return: path to last log, date and time from log's name
     """
-    log_files = [f for f in listdir(log_path) if f.startswith(SAMPLE) and re.findall(RE_TIME, f)]
+    if not path.exists(logs_path):
+        # it's an error
+        raise Exception('No such directory {} for logs'.format(logs_path))
+
+    log_files = [f for f in listdir(logs_path) if f.startswith(SAMPLE) and re.findall(RE_TIME, f)]
     if not log_files:
+        # it is not an error
         logging.info('No appropriate logs in the directory')
         return
-    return sorted(log_files, key=lambda x: re.findall(RE_TIME, x))[-1]
+    log_name = sorted(log_files, key=lambda x: re.findall(RE_TIME, x))[-1]  # logs sorted by date and time
+    log_path = path.join(logs_path, log_name)
+    base_name = path.splitext(log_name)[0]
+    parsed_time = datetime.strptime(base_name, 'nginx-access-ui.log-%Y%m%d').strftime('%Y.%m.%d')
+
+    return log_path, parsed_time
 
 
-def get_log_path(log_dir, log_name):
-    return path.join(log_dir, log_name)
-
-
-def get_report_name(log_file):
+def get_report_name(report_path, parsed_time):
     """
-    :param log_file: name for log with date and time
-    :return: name for report with date and time from log name
+    :param report_path: path to report
+    :param parsed_time: date and time for report
+    :return: path to report with name
     """
-    base_name = re.findall(RE_TIME, log_file)
-    if not base_name:
-        logging.error('No date and time for report, can\'t create report\'s name')
-        return
-    base_name = base_name[0]
-    return "report-{}.{}.{}.html".format(base_name[:4], base_name[4:6], base_name[6:])
-
-
-def get_report_path(report_dir, report_name):
-    return path.join(report_dir, report_name)
-
-
-def is_report_exist(report_path):
-    if path.exists(report_path):
-        logging.info('Report {} is exist, exit'.format(report_path))
-        return 1
+    report_name = "report-{}.html".format(parsed_time)
+    return path.join(report_path, report_name)
 
 
 def get_median(source_list):
@@ -121,21 +113,19 @@ def get_median(source_list):
         return source_list[med]
 
 
-def get_stat(counter, number_urls, overall_request_time):
+def get_stat(data):
     """
-    :param counter: dict with urls and lists their request_time
-    :param number_urls: total numbers af urls
-    :param overall_request_time: total request time
+    :param data: dict with urls and lists their request_time, total numbers af urls, total request time
     :return: list of dictionary with stat
     """
     stat = []
-    for key, val in counter.iteritems():
+    for key, val in data.get('counter').iteritems():
         stat.append({
             'url': key,
             'count': len(val),
-            'count_perc': round(1.0 * len(val) / number_urls * 100, PREC),
+            'count_perc': round(1.0 * len(val) / data.get('number_urls') * 100, PREC),
             'time_sum': sum(val),
-            'time_perc': round(1.0 * sum(val) / overall_request_time, PREC),
+            'time_perc': round(1.0 * sum(val) / data.get('overall_request_time'), PREC),
             'time_avg': round(1.0 * sum(val) / len(val), PREC),
             'time_max': max(val),
             'time_med': round(get_median(val), PREC)
@@ -147,7 +137,7 @@ def get_stat(counter, number_urls, overall_request_time):
 
 def get_by_line(log_path):
     """
-    Generator for big log - read by line
+    Generator for big logs - read by line
     :param log_path: path to log
     :return: next line of the log
     """
@@ -168,7 +158,8 @@ def get_url_from_line(line, line_number):
     """
     url = re.findall('\d+\.\d+\.\d+\.\d+\s.*\s.*\[.*?]\s".*?\s(.*?)\s.*"\s\d+\s\d+', line)
     if not url:
-        logging.error('Can\'t parse url from line {} of report, line is {}'.format(line_number, line.strip()))
+        # disable output to log for lines with error
+        # logging.error('Can\'t parse url from line {} of report, line is {}'.format(line_number, line.strip()))
         return
     return url[0]
 
@@ -191,25 +182,19 @@ def parse_log(log_path):
     :param log_path: path for log
     :return: list with stat
     """
-    number_urls = overall_request_time = number_errors = 0
-    data = {}
+    number_urls = 0  # number of urls for report
+    overall_request_time = 0  # overall time for all "good" urls
+    number_lines = 0  # overall number of lines in the log ("good" and "bad")
+    number_errors = 0  # number of urls with error
 
+    data = {}
+    # read log line by line (not a whole log at a time)
     for i, line in enumerate(get_by_line(log_path), 1):
         url = get_url_from_line(line, i)
         request_time = get_request_time_from_line(line, i)
+        number_lines += 1
         if not (url and request_time):
             number_errors += 1
-            # as we don't know how many lines in log - check on errors after START_CHECK_ERRORS lines
-            if i < START_CHECK_ERRORS:
-                continue
-            percentage_errors = 1.0 * number_errors / i * 100.0
-            if percentage_errors > PROC_ERRORS_LIMIT:
-                logging.error(
-                    'Percentage of errors {} more than limit {}, stop parsing'.format(
-                        percentage_errors, PROC_ERRORS_LIMIT
-                    )
-                )
-                return []
             continue
         value = data.get(url, [])
         value.append(request_time)
@@ -217,96 +202,68 @@ def parse_log(log_path):
         number_urls += 1
         overall_request_time += request_time
 
-    if number_errors > 0:
+    percentage_errors = 1.0 * number_errors / number_lines * 100.0
+    if percentage_errors > PROC_ERRORS_LIMIT:
         logging.info('Number of errors due to parsing {}'.format(number_errors))
 
-    return get_stat(data, number_urls, overall_request_time)
+    return {'counter': data,
+            'number_urls': number_urls,
+            'overall_request_time': overall_request_time
+            }
 
 
 def save_to_file(html, report_path):
-    try:
-        with open(report_path, "w") as f:
-            f.write(html)
-        return 1
-    except TypeError as e:
-        logging.exception('Error with saving report {}'.format(e.message))
-        return
+    with open(report_path, "w") as f:
+        f.write(html)
 
 
 def get_html_report(stat, base_report_path):
-    try:
-        with open(base_report_path) as f:
-            html = f.read()
-        html = html.replace(BASE_REPORT_REPL, json.dumps(stat))
-        return html
-    except TypeError as e:
-        logging.exception('Error with opening a template for the report {}'.format(e.message))
-        return
+    with open(base_report_path) as f:
+        html = f.read()
+    html = html.replace(BASE_REPORT_REPL, json.dumps(stat))
+    return html
 
 
 def update_ts(ts_path):
-    try:
-        with open(ts_path, "a") as f:
-            finish_time = time.time()
-            f.write(str(finish_time) + '\n')
-        utime(ts_path, (finish_time, finish_time))
-        return 1
-    except TypeError as e:
-        logging.exception('Error with working with ts file {}'.format(e.message))
-        return
+    with open(ts_path, "a") as f:
+        finish_time = time.time()
+        f.write(str(finish_time) + '\n')
+    utime(ts_path, (finish_time, finish_time))
 
 
 def main(settings):
-    # wrap to catch all errors
-    try:
-        # prepare path's for log and report
-        log_name = get_last_log_name(settings['LOG_DIR'])
-        if not log_name:
-            # if we don't have any logs - just stop analyzing without errors
-            return 1
-        log_path = get_log_path(settings['LOG_DIR'], log_name)
-        report_name = get_report_name(log_name)
-        if not report_name:
-            return 0
-        report_path = get_report_path(settings['REPORT_DIR'], report_name)
-        base_report_path = get_report_path(settings['REPORT_DIR'], BASE_REPORT_NAME)
+    # prepare path's for log and report
+    log_path, parsed_time = get_path_last_log(settings['LOG_DIR'])
+    # if we don't have any logs - just stop analyzing without errors
+    if not log_path:
+        return
+    report_path = get_report_name(settings['REPORT_DIR'], parsed_time)
 
-        # exit if report exists
-        if is_report_exist(report_path):
-            return 1
+    # exit if report exists
+    if path.exists(report_path):
+        logging.info('Report {} is exist, exit'.format(report_path))
+        return
+    base_report_path = path.join(settings['REPORT_DIR'], BASE_REPORT_NAME)
 
-        # fetch statistic
-        stat = parse_log(log_path)
-        if not stat:
-            logging.error('Report was not created - stat was empty, exit'.format(report_name))
-            return 0
+    # fetch data
+    data_from_log = parse_log(log_path)
 
-        # create report from stat
-        html_report = get_html_report(stat[:settings['REPORT_SIZE']], base_report_path)
-        if not html_report:
-            logging.error('Report was not created, exit'.format(report_name))
-            return 0
+    # collected statistic
+    stat = get_stat(data_from_log)
 
-        # save report with statistic to file
-        if not save_to_file(html_report, report_path):
-            logging.error('Report was not saving, exit'.format(report_name))
-            return 0
+    # create report from stat
+    html_report = get_html_report(stat[:settings['REPORT_SIZE']], base_report_path)
 
-        if not update_ts(settings.get('TS_FILE', None)):
-            logging.error('ts file was not created - but report was created'.format(report_name))
-            return 0
+    # save report with statistic to file
+    save_to_file(html_report, report_path)
 
-        return 1
-    except:  # it is not good but for learning goals we want to catch all exceptions
-        logging.exception('Something went wrong')
-        return 0
+    # update ts file
+    update_ts(settings.get('TS_FILE', None))
 
 
 if __name__ == "__main__":
-    config_file = get_config_from_parser()
-
-    if not path.isfile(config_file):
-        print "File " + config_file + " not exists"
+    config_file = get_config()
+    if not config_file:
         sys.exit(-1)
 
     try:
@@ -320,8 +277,12 @@ if __name__ == "__main__":
 
     set_logging(merged_config.get('LOG_FILE', None))
     logging.info('** Start analyzing... **')
-    status = main(merged_config)
-    if status:
+
+    # wrap to catch all errors
+    try:
+        main(merged_config)
         logging.info('**** Stop analyzing. Work done. ****')
-    else:
+
+    except:
+        logging.exception('Something went wrong')
         logging.info('!!!! Stop analyzing with an error !!!!')

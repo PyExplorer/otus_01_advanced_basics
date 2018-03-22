@@ -32,31 +32,19 @@ class AnalyzerTest(unittest.TestCase):
 
     def test_get_log_name(self):
         # empty path
-        with self.assertRaises(OSError):
-            la.get_last_log_name('')
+        with self.assertRaises(Exception):
+            la.get_path_last_log('')
 
         # no such files in the directory
-        self.assertEqual(la.get_last_log_name('.'), None)
+        self.assertEqual(la.get_path_last_log('.'), None)
 
         # files are in the directory
-        self.assertEqual(la.get_last_log_name('tests/log'), 'nginx-access-ui.log-20170627.txt')
+        self.assertEqual(la.get_path_last_log('tests/log'), ('tests/log/nginx-access-ui.log-20170627.txt', '2017.06.27'))
 
     def test_get_report_name(self):
-        # empty log name
-        self.assertEqual(
-            la.get_report_name(''), None)
-
-        # wrong log name
-        self.assertEqual(
-            la.get_report_name('nginx-access-ui.log-2017067.txt'), None)
-
-        # name with int
-        with self.assertRaises(TypeError):
-            la.get_report_name(187)
-
         # good log name
         self.assertEqual(
-            la.get_report_name('nginx-access-ui.log-20170627.txt'), 'report-2017.06.27.html')
+            la.get_report_name('', '2017.06.27'), 'report-2017.06.27.html')
 
     def test_get_median(self):
         # good source
@@ -69,7 +57,7 @@ class AnalyzerTest(unittest.TestCase):
             la.get_median(['as', 'bu', 3, 4])
 
     def test_get_url_from_line(self):
-        self.assertEqual(la.get_url_from_line(TEST_LINE_CORRECT.replace('\n', ''), 1), 'api/v2/banner/25019354')
+        self.assertEqual(la.get_url_from_line(TEST_LINE_CORRECT.replace('\n', ''), 1), '/api/v2/banner/25019354')
         self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_1.replace('\n', ''), 1), None)
         self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_2.replace('\n', ''), 1), None)
         self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_3.replace('\n', ''), 1), None)
@@ -82,9 +70,26 @@ class AnalyzerTest(unittest.TestCase):
 class ParseAnalyzerTest(unittest.TestCase):
     def test_parse_log(self):
         # bad log from start
-        self.assertEqual(la.parse_log('tests/log/nginx-access-ui.log-20170627.txt'), [])
+        self.assertEqual(la.parse_log('tests/log/nginx-access-ui.log-20170627.txt'),
+                         {
+                             'number_urls': 1,
+                             'counter': {'/api/v2/banner/1717161': [0.138]},
+                             'overall_request_time': 0.138}
+                         )
         # bad log in the middle
-        self.assertEqual(la.parse_log('tests/log/nginx-access-ui.log-20170625.txt'), [])
+        self.assertEqual(
+            la.parse_log('tests/log/nginx-access-ui.log-20170625.txt'),
+            {
+                'number_urls': 4,
+                'counter': {
+                    '/export/appinstall_raw/2017-06-30/': [0.001],
+                    '/api/v2/banner/25013431': [0.917],
+                    '/export/appinstall_raw/2017-06-29/': [0.003],
+                    '/api/v2/banner/25020545': [0.738]
+                },
+                'overall_request_time': 1.659
+            }
+        )
 
 
 class StatAnalyzerTest(unittest.TestCase):
@@ -127,16 +132,15 @@ class StatAnalyzerTest(unittest.TestCase):
         self.assertEqual(la.get_median([1, 2, 3]), 2)
         self.assertEqual(
             la.get_stat(
-                # counter
                 {
-                    'url1': [1.0, 2.0, 3.0],
-                    'url2': [3.0, 4.0, 5.0, 6.0],
-                    'url3': [1.0]
+                    'counter': {
+                        'url1': [1.0, 2.0, 3.0],
+                        'url2': [3.0, 4.0, 5.0, 6.0],
+                        'url3': [1.0]
+                    },
+                    'number_urls': 8,
+                    'overall_request_time': 25
                 },
-                # number_urls
-                8,
-                # overall_request_time
-                25
             ),
             test_data
         )
