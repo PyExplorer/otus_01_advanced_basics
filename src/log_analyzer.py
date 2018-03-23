@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 
-# log_format ui_short '$remote_addr $remote_user $http_x_real_ip [$time_local] "$request" '
-#                     '$status $body_bytes_sent "$http_referer" '
-#                     '"$http_user_agent" "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER" '
-#                     '$request_time';
+# log_format ui_short '$remote_addr $remote_user $http_x_real_ip [$time_local]
+# "$request $status $body_bytes_sent "$http_referer" "$http_user_agent"
+# "$http_x_forwarded_for" "$http_X_REQUEST_ID" "$http_X_RB_USER"
+# '$request_time';
 
 import gzip
 import json
@@ -35,7 +35,8 @@ PROC_ERRORS_LIMIT = 0.01
 
 def get_config():
     parser = ArgumentParser(description="Parser")
-    parser.add_argument("-c", "--config", action='store', default="config.json",
+    parser.add_argument("-c", "--config", action='store',
+                        default="config.json",
                         help="Set the path for config.json")
     args = parser.parse_args()
 
@@ -77,15 +78,19 @@ def get_path_last_log(logs_path):
         # it's an error
         raise Exception('No such directory {} for logs'.format(logs_path))
 
-    log_files = [f for f in listdir(logs_path) if f.startswith(SAMPLE) and re.findall(RE_TIME, f)]
+    log_files = [f for f in listdir(logs_path) if f.startswith(SAMPLE) and
+                 re.findall(RE_TIME, f)]
     if not log_files:
         # it is not an error
         logging.info('No appropriate logs in the directory')
         return
-    log_name = sorted(log_files, key=lambda x: re.findall(RE_TIME, x))[-1]  # logs sorted by date and time
+    # logs sorted by date and time
+    log_name = sorted(log_files, key=lambda x: re.findall(RE_TIME, x))[-1]
     log_path = path.join(logs_path, log_name)
     base_name = path.splitext(log_name)[0]
-    parsed_time = datetime.strptime(base_name, 'nginx-access-ui.log-%Y%m%d').strftime('%Y.%m.%d')
+    parsed_time = datetime.strptime(
+        base_name,
+        'nginx-access-ui.log-%Y%m%d').strftime('%Y.%m.%d')
 
     return log_path, parsed_time
 
@@ -115,7 +120,8 @@ def get_median(source_list):
 
 def get_stat(data):
     """
-    :param data: dict with urls and lists their request_time, total numbers af urls, total request time
+    :param data: dict with urls and lists their request_time, total numbers of
+    urls, total request time
     :return: list of dictionary with stat
     """
     stat = []
@@ -123,9 +129,11 @@ def get_stat(data):
         stat.append({
             'url': key,
             'count': len(val),
-            'count_perc': round(1.0 * len(val) / data.get('number_urls') * 100, PREC),
+            'count_perc': round(1.0 * len(val) /
+                                data.get('number_urls') * 100, PREC),
             'time_sum': sum(val),
-            'time_perc': round(1.0 * sum(val) / data.get('overall_request_time'), PREC),
+            'time_perc': round(1.0 * sum(val) /
+                               data.get('overall_request_time'), PREC),
             'time_avg': round(1.0 * sum(val) / len(val), PREC),
             'time_max': max(val),
             'time_med': round(get_median(val), PREC)
@@ -156,10 +164,14 @@ def get_url_from_line(line, line_number):
     :param line_number: current line number
     :return: str with url
     """
-    url = re.findall('\d+\.\d+\.\d+\.\d+\s.*\s.*\[.*?]\s".*?\s(.*?)\s.*"\s\d+\s\d+', line)
+    url = re.findall(
+        '\d+\.\d+\.\d+\.\d+\s.*\s.*\[.*?]\s".*?\s(.*?)\s.*"\s\d+\s\d+',
+        line
+    )
     if not url:
         # disable output to log for lines with error
-        # logging.error('Can\'t parse url from line {} of report, line is {}'.format(line_number, line.strip()))
+        # logging.error('Can\'t parse url from line {} of report, line is {}'.
+        # format(line_number, line.strip()))
         return
     return url[0]
 
@@ -172,7 +184,10 @@ def get_request_time_from_line(line, line_number):
     """
     request_time = re.findall('\d+.\d+$', line)
     if not request_time:
-        logging.error('Can\'t parse request_time from line {} of report'.format(line_number))
+        logging.error(
+            'Can\'t parse request_time from line {} of report'.format(
+                line_number)
+        )
         return
     return float(request_time[0])
 
@@ -204,17 +219,14 @@ def parse_log(log_path):
 
     percentage_errors = 1.0 * number_errors / number_lines * 100.0
     if percentage_errors > PROC_ERRORS_LIMIT:
-        logging.info('Number of errors due to parsing {}'.format(number_errors))
+        logging.info(
+            'Number of errors due to parsing {}'.format(number_errors)
+        )
 
     return {'counter': data,
             'number_urls': number_urls,
             'overall_request_time': overall_request_time
             }
-
-
-def save_to_file(html, report_path):
-    with open(report_path, "w") as f:
-        f.write(html)
 
 
 def get_html_report(stat, base_report_path):
@@ -252,10 +264,14 @@ def main(settings):
     stat = get_stat(data_from_log)
 
     # create report from stat
-    html_report = get_html_report(stat[:settings['REPORT_SIZE']], base_report_path)
+    html_report = get_html_report(
+        stat[:settings['REPORT_SIZE']],
+        base_report_path
+    )
 
     # save report with statistic to file
-    save_to_file(html_report, report_path)
+    with open(report_path, "w") as f:
+        f.write(html_report)
 
     # update ts file
     update_ts(settings.get('TS_FILE', None))
@@ -286,3 +302,4 @@ if __name__ == "__main__":
     except:
         logging.exception('Something went wrong')
         logging.info('!!!! Stop analyzing with an error !!!!')
+        sys.exit(-1)

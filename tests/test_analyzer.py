@@ -4,17 +4,20 @@ import unittest
 import src.log_analyzer as la
 
 TEST_LINE_CORRECT = """
-1.196.116.32 -  - [29/Jun/2017:03:50:22 +0300] "GET /api/v2/banner/25019354 HTTP/1.1"
+1.196.116.32 -  - [29/Jun/2017:03:50:22 +0300] 
+"GET /api/v2/banner/25019354 HTTP/1.1"
  200 927 "-" "Lynx/2.8.8dev.9 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/2.10.5" "-"
 "1498697422-2190034393-4708-9752759" "dc7161be3" 0.390
 """
 TEST_LINE_INCORRECT_1 = """
-1.196.116.32 -  - [29/Jun/2017:03:50:22 +0300] "GET/api/v2/banner/25019354 HTTP/1.1"
+1.196.116.32 -  - [29/Jun/2017:03:50:22 +0300] 
+"GET/api/v2/banner/25019354 HTTP/1.1"
  200 927 "-" "Lynx/2.8.8dev.9 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/2.10.5" "-"
 "1498697422-2190034393-4708-9752759" "dc7161be3"
 """
 TEST_LINE_INCORRECT_2 = """
-196.116.32 -  - [29/Jun/2017:03:50:22 +0300] "GET /api/v2/banner/25019354 HTTP/1.1"
+196.116.32 -  - [29/Jun/2017:03:50:22 +0300] 
+"GET /api/v2/banner/25019354 HTTP/1.1"
  200 927 "-" "Lynx/2.8.8dev.9 libwww-FM/2.14 SSL-MM/1.4.1 GNUTLS/2.10.5" "-"
 "1498697422-2190034393-4708-9752759" "dc7161be3" 0.390
 """
@@ -28,7 +31,9 @@ TEST_LINE_INCORRECT_3 = """
 class AnalyzerTest(unittest.TestCase):
     def test_merge_two_config(self):
         self.assertEqual(
-            la.merge_two_config({'a': 1, 'b': 2}, {'a': 2, 'c': 4}), {'a': 2, 'b': 2, 'c': 4})
+            la.merge_two_config(
+                {'a': 1, 'b': 2}, {'a': 2, 'c': 4}), {'a': 2, 'b': 2, 'c': 4}
+        )
 
     def test_get_log_name(self):
         # empty path
@@ -39,7 +44,10 @@ class AnalyzerTest(unittest.TestCase):
         self.assertEqual(la.get_path_last_log('.'), None)
 
         # files are in the directory
-        self.assertEqual(la.get_path_last_log('tests/log'), ('tests/log/nginx-access-ui.log-20170627.txt', '2017.06.27'))
+        self.assertEqual(
+            la.get_path_last_log('tests/log'),
+            ('tests/log/nginx-access-ui.log-20170627.txt', '2017.06.27')
+        )
 
     def test_get_report_name(self):
         # good log name
@@ -57,25 +65,45 @@ class AnalyzerTest(unittest.TestCase):
             la.get_median(['as', 'bu', 3, 4])
 
     def test_get_url_from_line(self):
-        self.assertEqual(la.get_url_from_line(TEST_LINE_CORRECT.replace('\n', ''), 1), '/api/v2/banner/25019354')
-        self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_1.replace('\n', ''), 1), None)
-        self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_2.replace('\n', ''), 1), None)
-        self.assertEqual(la.get_url_from_line(TEST_LINE_INCORRECT_3.replace('\n', ''), 1), None)
+        self.assertEqual(
+            la.get_url_from_line(TEST_LINE_CORRECT.replace('\n', ''), 1),
+            '/api/v2/banner/25019354'
+        )
+        self.assertEqual(
+            la.get_url_from_line(TEST_LINE_INCORRECT_1.replace('\n', ''), 1),
+            None
+        )
+        self.assertEqual(
+            la.get_url_from_line(TEST_LINE_INCORRECT_2.replace('\n', ''), 1),
+            None
+        )
+        self.assertEqual(
+            la.get_url_from_line(TEST_LINE_INCORRECT_3.replace('\n', ''), 1),
+            None
+        )
 
     def test_get_request_time_from_line(self):
-        self.assertEqual(la.get_request_time_from_line(TEST_LINE_CORRECT, 1), 0.390)
-        self.assertEqual(la.get_request_time_from_line(TEST_LINE_INCORRECT_1, 1), None)
+        self.assertEqual(
+            la.get_request_time_from_line(TEST_LINE_CORRECT, 1),
+            0.390
+        )
+        self.assertEqual(
+            la.get_request_time_from_line(TEST_LINE_INCORRECT_1, 1),
+            None
+        )
 
 
 class ParseAnalyzerTest(unittest.TestCase):
     def test_parse_log(self):
         # bad log from start
-        self.assertEqual(la.parse_log('tests/log/nginx-access-ui.log-20170627.txt'),
-                         {
-                             'number_urls': 1,
-                             'counter': {'/api/v2/banner/1717161': [0.138]},
-                             'overall_request_time': 0.138}
-                         )
+        self.assertEqual(
+            la.parse_log('tests/log/nginx-access-ui.log-20170627.txt'),
+            {
+                'number_urls': 1,
+                'counter': {'/api/v2/banner/1717161': [0.138]},
+                'overall_request_time': 0.138
+            }
+        )
         # bad log in the middle
         self.assertEqual(
             la.parse_log('tests/log/nginx-access-ui.log-20170625.txt'),

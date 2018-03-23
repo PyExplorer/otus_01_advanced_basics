@@ -78,7 +78,9 @@ def n_ary(func):
         elif len(args) == 2:
             return source_func(*args)
         else:
-            return split_args(source_func, args[0], split_args(source_func, *args[1:]))
+            return split_args(
+                source_func, args[0], split_args(source_func, *args[1:])
+            )
 
     @wraps(func)
     def wrapper(*args):
@@ -113,11 +115,15 @@ def trace(filler):
     def log_trace(func):
         def wrapper(*args):
             const_args = ",".join(str(x) for x in args)
-            print "{} --> {}({})".format(filler * func.level, func.__name__, const_args)
+            print "{} --> {}({})".format(
+                filler * func.level, func.__name__, const_args
+            )
             func.level += 1
             res = func(*args)
             func.level -= 1
-            print "{} <-- {}({}) == {}".format(filler * func.level, func.__name__, const_args, res)
+            print "{} <-- {}({}) == {}".format(
+                filler * func.level, func.__name__, const_args, res
+            )
             if func.level != 0:
                 return res
             else:
