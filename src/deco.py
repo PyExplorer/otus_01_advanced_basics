@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
+import pickle
 from functools import update_wrapper, wraps
 
 
@@ -50,12 +51,13 @@ def memo(func):
 
     @wraps(func)
     def wrapper(*args):
-        if args in memo_store:
-            return memo_store[args]
+        pickled = pickle.dumps(args)
+        if pickled in memo_store:
+            return memo_store[pickled]
         else:
             res = func(*args)
             update_wrapper(wrapper, func)
-            memo_store[args] = res
+            memo_store[pickled] = res
             return res
 
     return wrapper
